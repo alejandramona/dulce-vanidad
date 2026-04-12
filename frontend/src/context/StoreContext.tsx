@@ -107,6 +107,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     refreshProducts();
   }, [refreshProducts]);
 
+  // Ping cada 14 min para que Render no duerma el servidor
+  useEffect(() => {
+    const ping = () => fetch(`${API}/health`).catch(() => {});
+    const interval = setInterval(ping, 14 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // CRUD productos — siempre va al backend
   const addProduct = useCallback(async (product: Omit<Product, "id">, token: string) => {
     const res = await fetch(`${API}/products`, {
