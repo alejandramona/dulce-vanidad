@@ -35,6 +35,10 @@ const orderSchema = new mongoose.Schema({
   orderNumber: { type: String, unique: true },
 }, { timestamps: true });
 
+// Índices para evitar el error "Sort exceeded memory limit"
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+
 orderSchema.pre('save', async function (next) {
   if (!this.orderNumber) {
     const count = await mongoose.model('Order').countDocuments();

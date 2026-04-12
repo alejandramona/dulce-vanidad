@@ -16,6 +16,13 @@ const productSchema = new mongoose.Schema({
   tags: [String],
 }, { timestamps: true });
 
+// Índices para evitar el error "Sort exceeded memory limit"
+productSchema.index({ createdAt: -1 });
+productSchema.index({ active: 1, createdAt: -1 });
+productSchema.index({ category: 1, active: 1 });
+productSchema.index({ featured: 1, active: 1 });
+productSchema.index({ name: 'text', description: 'text', tags: 'text' });
+
 // id virtual para que el frontend reciba "id" además de "_id"
 productSchema.virtual('id').get(function () {
   return this._id.toHexString();
