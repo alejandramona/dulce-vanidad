@@ -28,6 +28,7 @@ const Admin = () => {
   const [token, setToken] = useState(() => localStorage.getItem("dv_admin_token") || "");
   const [authenticated, setAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -54,7 +55,8 @@ const Admin = () => {
         .then((r) => {
           if (r.ok) {
             setAuthenticated(true);
-            refreshProducts(token);
+            setReloading(true);
+            refreshProducts(token).finally(() => setReloading(false));
           } else {
             localStorage.removeItem("dv_admin_token");
             setToken("");
@@ -91,7 +93,8 @@ const Admin = () => {
       localStorage.setItem("dv_admin_token", data.token);
       setToken(data.token);
       setAuthenticated(true);
-      refreshProducts(data.token);
+      setReloading(true);
+      refreshProducts(data.token).finally(() => setReloading(false));
       toast.success("Bienvenida al panel admin");
     } catch { toast.error("Error de conexión con el servidor"); }
     finally { setAuthLoading(false); }
@@ -301,8 +304,29 @@ const Admin = () => {
         {/* PRODUCTOS */}
         {activeTab === "products" && (
           <div className="space-y-3">
-            {loadingProducts ? (
-              <div className="text-center py-12 text-muted-foreground">Cargando productos...</div>
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => { setReloading(true); refreshProducts(token).finally(() => setReloading(false)); }}
+                disabled={reloading || loadingProducts}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                <RefreshCw className={`w-4 h-4 ${(reloading || loadingProducts) ? "animate-spin" : ""}`} /> Actualizar
+              </button>
+            </div>
+
+            {(loadingProducts || reloading) ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-card rounded-xl p-4 flex items-center gap-4 animate-pulse">
+                    <div className="w-16 h-16 rounded-lg bg-muted flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-muted rounded w-3/4" />
+                      <div className="h-3 bg-muted rounded w-1/2" />
+                      <div className="h-3 bg-muted rounded w-1/4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : products.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <p className="mb-4">No hay productos aún</p>
