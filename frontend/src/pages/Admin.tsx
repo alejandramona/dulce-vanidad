@@ -24,11 +24,16 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const Admin = () => {
-  const { products, loadingProducts, addProduct, updateProduct, deleteProduct, toggleSoldOut, refreshProducts } = useStore();
+  const { products, addProduct, updateProduct, deleteProduct, toggleSoldOut, refreshProducts } = useStore();
   const [token, setToken] = useState(() => localStorage.getItem("dv_admin_token") || "");
   const [authenticated, setAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [reloading, setReloading] = useState(false);
+
+  const reloadProducts = (tok: string) => {
+    setReloading(true);
+    refreshProducts(tok).finally(() => setReloading(false));
+  };
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -55,8 +60,7 @@ const Admin = () => {
         .then((r) => {
           if (r.ok) {
             setAuthenticated(true);
-            setReloading(true);
-            refreshProducts(token).finally(() => setReloading(false));
+            reloadProducts(token);
           } else {
             localStorage.removeItem("dv_admin_token");
             setToken("");
@@ -93,8 +97,7 @@ const Admin = () => {
       localStorage.setItem("dv_admin_token", data.token);
       setToken(data.token);
       setAuthenticated(true);
-      setReloading(true);
-      refreshProducts(data.token).finally(() => setReloading(false));
+      reloadProducts(data.token);
       toast.success("Bienvenida al panel admin");
     } catch { toast.error("Error de conexión con el servidor"); }
     finally { setAuthLoading(false); }
@@ -306,15 +309,15 @@ const Admin = () => {
           <div className="space-y-3">
             <div className="flex justify-end mb-2">
               <button
-                onClick={() => { setReloading(true); refreshProducts(token).finally(() => setReloading(false)); }}
-                disabled={reloading || loadingProducts}
+                onClick={() => reloadProducts(token)}
+                disabled={reloading}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
               >
-                <RefreshCw className={`w-4 h-4 ${(reloading || loadingProducts) ? "animate-spin" : ""}`} /> Actualizar
+                <RefreshCw className={`w-4 h-4 ${reloading ? "animate-spin" : ""}`} /> Actualizar
               </button>
             </div>
 
-            {(loadingProducts || reloading) ? (
+            {reloading ? (
               <div className="space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="bg-card rounded-xl p-4 flex items-center gap-4 animate-pulse">
