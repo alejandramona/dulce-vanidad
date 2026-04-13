@@ -85,19 +85,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshProducts = useCallback(async (token?: string) => {
     setLoadingProducts(true);
     try {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`${API}/products${token ? "?active=all" : ""}`, { headers });
+      // Con token carga todos (admin), sin token solo los activos (tienda)
+      const url = token ? `${API}/products?active=true` : `${API}/products`;
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error("Error cargando productos");
       const data = await res.json();
       const normalized = data.map(normalizeProduct);
       setProducts(normalized);
-
-      // categorías únicas
       const cats = ["Todo", ...Array.from(new Set<string>(normalized.map((p: Product) => p.category))).sort()];
       setCategories(cats);
     } catch (err) {
       console.error("No se pudieron cargar productos:", err);
+      setProducts([]);
     } finally {
       setLoadingProducts(false);
     }
