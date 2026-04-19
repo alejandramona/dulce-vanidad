@@ -6,17 +6,23 @@ const { cacheGet, cacheSet, cacheDel } = require('../config/cache');
 const { uploadImage, deleteImage } = require('../config/cloudinary');
 
 const PRODUCTS_KEY = 'products:list';
+const PRODUCTS_ADMIN_KEY = 'products:admin';
 const CATEGORIES_KEY = 'products:categories';
 
-// GET /api/products — listado (público, con caché)
+// GET /api/products — público ve activos, admin ve todos
 router.get('/', async (req, res) => {
   try {
     const { category, search } = req.query;
+    const isAdmin = !!req.headers.authorization;
+
+    // Sin filtros adicionales → intentar caché
     if (!category && !search) {
-      const cached = cacheGet(PRODUCTS_KEY);
+      const cacheKey = isAdmin ? PRODUCTS_ADMIN_KEY : PRODUCTS_KEY;
+      const cached = cacheGet(cacheKey);
       if (cached) return res.json(cached);
     }
-    const filter = { active: true };
+
+    const filter = isAdmin ? {} : { active: true };
     if (category) filter.category = { $regex: category, $options: 'i' };
     if (search) {
       filter.$or = [
@@ -24,11 +30,17 @@ router.get('/', async (req, res) => {
         { description: { $regex: search, $options: 'i' } },
       ];
     }
-    // Ahora las imágenes son URLs pequeñas — se puede traer todo sin problema
+
     const products = await Product.find(filter).sort({ createdAt: -1 }).lean();
-    if (!category && !search) cacheSet(PRODUCTS_KEY, products);
+
+    if (!category && !search) {
+      const cacheKey = isAdmin ? PRODUCTS_ADMIN_KEY : PRODUCTS_KEY;
+      cacheSet(cacheKey, products);
+    }
+
     res.json(products);
   } catch (error) {
+    // Fallback a caché si hay error de BD
     const stale = cacheGet(PRODUCTS_KEY);
     if (stale) return res.json(stale);
     res.status(500).json({ message: error.message });
@@ -62,21 +74,21 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/products — sube imágenes a Cloudinary antes de guardar
+// POST /api/products — crea producto, sube imágenes a Cloudinary
 router.post('/', protect, async (req, res) => {
   try {
     const data = { ...req.body };
 
-    // Subir imágenes base64 a Cloudinary
     if (data.images && Array.isArray(data.images)) {
       data.images = await Promise.all(
         data.images.map(img => uploadImage(img))
       );
-      data.images = data.images.filter(Boolean); // quitar nulls
+      data.images = data.images.filter(Boolean);
     }
 
     const product = await Product.create(data);
     cacheDel(PRODUCTS_KEY);
+    cacheDel(PRODUCTS_ADMIN_KEY);
     cacheDel(CATEGORIES_KEY);
     res.status(201).json(product);
   } catch (error) {
@@ -84,12 +96,11 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// PUT /api/products/:id
+// PUT /api/products/:id — actualiza producto
 router.put('/:id', protect, async (req, res) => {
   try {
     const data = { ...req.body };
 
-    // Si vienen imágenes nuevas en base64, subirlas
     if (data.images && Array.isArray(data.images)) {
       data.images = await Promise.all(
         data.images.map(img => uploadImage(img))
@@ -102,6 +113,7 @@ router.put('/:id', protect, async (req, res) => {
     );
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
     cacheDel(PRODUCTS_KEY);
+    cacheDel(PRODUCTS_ADMIN_KEY);
     cacheDel(`product:${req.params.id}`);
     res.json(product);
   } catch (error) {
@@ -116,6 +128,7 @@ router.patch('/:id/stock', protect, async (req, res) => {
     const product = await Product.findByIdAndUpdate(req.params.id, { stock }, { new: true });
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
     cacheDel(PRODUCTS_KEY);
+    cacheDel(PRODUCTS_ADMIN_KEY);
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -127,11 +140,11 @@ router.delete('/:id', protect, async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
-    // Eliminar imágenes de Cloudinary
     if (product.images) {
       await Promise.all(product.images.map(url => deleteImage(url)));
     }
     cacheDel(PRODUCTS_KEY);
+    cacheDel(PRODUCTS_ADMIN_KEY);
     cacheDel(CATEGORIES_KEY);
     cacheDel(`product:${req.params.id}`);
     res.json({ message: 'Eliminado' });

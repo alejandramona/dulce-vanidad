@@ -8,7 +8,6 @@ const migrateRoutes = require('./routes/migrate');
 
 const app = express();
 
-// CORS abierto — acepta cualquier vercel.app y localhost sin necesitar variable de entorno
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
@@ -27,14 +26,16 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ limit: '5mb', extended: true }));
+// 20mb para soportar imágenes base64 grandes al crear/editar productos
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/migrate', migrateRoutes);
 
+// Health check para el cron-job y el ping del frontend
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

@@ -47,7 +47,6 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-// Normaliza producto del backend al shape del frontend
 function normalizeProduct(p: any): Product {
   return {
     id: p._id || p.id,
@@ -81,14 +80,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem("dv_cart", JSON.stringify(cart));
   }, [cart]);
 
-  // Carga productos desde la API
   const refreshProducts = useCallback(async (token?: string) => {
     setLoadingProducts(true);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      // Con token carga todos (admin), sin token solo los activos (tienda)
-      const url = token ? `${API}/products?active=true` : `${API}/products`;
+
+      // Admin (con token) → trae TODOS sin filtro
+      // Tienda pública (sin token) → solo activos
+      const url = `${API}/products`;
       const res = await fetch(url, { headers });
       if (!res.ok) throw new Error("Error cargando productos");
       const data = await res.json();
@@ -115,7 +115,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => clearInterval(interval);
   }, []);
 
-  // CRUD productos — siempre va al backend
   const addProduct = useCallback(async (product: Omit<Product, "id">, token: string) => {
     const res = await fetch(`${API}/products`, {
       method: "POST",
@@ -154,7 +153,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await updateProduct(id, { soldOut: !product.soldOut }, token);
   }, [products, updateProduct]);
 
-  // Carrito
   const addToCart = useCallback((product: Product, quantity = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
