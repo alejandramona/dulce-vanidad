@@ -3,10 +3,12 @@ const router = express.Router();
 const Product = require('../models/Product');
 const { protect } = require('../middleware/auth');
 const { cacheGet, cacheSet, cacheDel } = require('../config/cache');
+const { uploadImage, deleteImage } = require('../config/cloudinary');
 
-const PRODUCTS_KEY = 'products:all';
+const PRODUCTS_KEY = 'products:list';
 const CATEGORIES_KEY = 'products:categories';
 
+// GET /api/products — listado (público, con caché)
 router.get('/', async (req, res) => {
   try {
     const { category, search } = req.query;
@@ -22,11 +24,10 @@ router.get('/', async (req, res) => {
         { description: { $regex: search, $options: 'i' } },
       ];
     }
+    // Ahora las imágenes son URLs pequeñas — se puede traer todo sin problema
     const products = await Product.find(filter).sort({ createdAt: -1 }).lean();
-    // Solo primera imagen en listado para no reventar la memoria
-    const lightweight = products.map(p => ({ ...p, images: p.images?.slice(0, 1) || [] }));
-    if (!category && !search) cacheSet(PRODUCTS_KEY, lightweight);
-    res.json(lightweight);
+    if (!category && !search) cacheSet(PRODUCTS_KEY, products);
+    res.json(products);
   } catch (error) {
     const stale = cacheGet(PRODUCTS_KEY);
     if (stale) return res.json(stale);
@@ -34,18 +35,20 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/products/categories
 router.get('/categories', async (req, res) => {
   try {
     const cached = cacheGet(CATEGORIES_KEY);
     if (cached) return res.json(cached);
     const categories = await Product.distinct('category', { active: true });
-    cacheSet(CATEGORIES_KEY, categories.sort());
+    cacheSet(CATEGORIES_KEY, categories.sort(), 10 * 60 * 1000);
     res.json(categories.sort());
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
+// GET /api/products/:id
 router.get('/:id', async (req, res) => {
   try {
     const cached = cacheGet(`product:${req.params.id}`);
@@ -59,9 +62,20 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /api/products — sube imágenes a Cloudinary antes de guardar
 router.post('/', protect, async (req, res) => {
   try {
-    const product = await Product.create(req.body);
+    const data = { ...req.body };
+
+    // Subir imágenes base64 a Cloudinary
+    if (data.images && Array.isArray(data.images)) {
+      data.images = await Promise.all(
+        data.images.map(img => uploadImage(img))
+      );
+      data.images = data.images.filter(Boolean); // quitar nulls
+    }
+
+    const product = await Product.create(data);
     cacheDel(PRODUCTS_KEY);
     cacheDel(CATEGORIES_KEY);
     res.status(201).json(product);
@@ -70,9 +84,22 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
+// PUT /api/products/:id
 router.put('/:id', protect, async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const data = { ...req.body };
+
+    // Si vienen imágenes nuevas en base64, subirlas
+    if (data.images && Array.isArray(data.images)) {
+      data.images = await Promise.all(
+        data.images.map(img => uploadImage(img))
+      );
+      data.images = data.images.filter(Boolean);
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      req.params.id, data, { new: true, runValidators: true }
+    );
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
     cacheDel(PRODUCTS_KEY);
     cacheDel(`product:${req.params.id}`);
@@ -82,6 +109,7 @@ router.put('/:id', protect, async (req, res) => {
   }
 });
 
+// PATCH /:id/stock
 router.patch('/:id/stock', protect, async (req, res) => {
   try {
     const { stock } = req.body;
@@ -94,10 +122,15 @@ router.patch('/:id/stock', protect, async (req, res) => {
   }
 });
 
+// DELETE /:id
 router.delete('/:id', protect, async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
+    // Eliminar imágenes de Cloudinary
+    if (product.images) {
+      await Promise.all(product.images.map(url => deleteImage(url)));
+    }
     cacheDel(PRODUCTS_KEY);
     cacheDel(CATEGORIES_KEY);
     cacheDel(`product:${req.params.id}`);

@@ -4,6 +4,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
+const migrateRoutes = require('./routes/migrate');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use(express.urlencoded({ limit: '5mb', extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/migrate', migrateRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
