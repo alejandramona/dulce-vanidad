@@ -5,7 +5,7 @@ import { Trash2, Edit, Plus, X, Ban, CheckCircle, LogOut, ImagePlus, RefreshCw }
 import { toast } from "sonner";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const CATEGORIES = ["Cuidado Capilar", "Cuidado Corporal", "Maquillaje y Cuidado Facial"];
+const CATEGORIES = ["Cuidado Capilar", "Cuidado Corporal", "Maquillaje y Cuidado Facial","Anchetas y Regalos", "Accesorios y Otros"];
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pendiente",
